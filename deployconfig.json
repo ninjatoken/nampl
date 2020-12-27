@@ -1,0 +1,10 @@
+{
+    "dev":{
+        "coinOwner":"0x5900D2136Bb526D70205b6f00D27F02Ec156C96E",
+        "policyOwner":"0x93C1c48B37ec6Cde511E0b5105982951810E4f8e"
+    },
+    "prod":{
+        "coinOwner":"0x7570B6D338B1C3B17Cce1459343e9F91Cc8207c0",
+        "policyOwner":"0x13cbF8b0BFA9A9aE2b984233D637A2d15C0d9117"
+    }
+}
