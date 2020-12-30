@@ -86,7 +86,7 @@ contract UFragmentsPolicy is Ownable {
     address public orchestrator;
 
     modifier onlyOrchestrator() {
-        require(msg.sender == orchestrator);
+        require(msg.sender == orchestrator, "you are not Orchestrator");
         _;
     }
 
@@ -98,10 +98,10 @@ contract UFragmentsPolicy is Ownable {
      *      and targetRate is CpiOracleRate / baseCpi
      */
     function rebase() external onlyOrchestrator {
-        require(inRebaseWindow());
+        require(inRebaseWindow(),"not in rebase window");
 
         // This comparison also ensures there is no reentrancy.
-        require(lastRebaseTimestampSec.add(minRebaseTimeIntervalSec) < now);
+        require(lastRebaseTimestampSec.add(minRebaseTimeIntervalSec) < now,"ensure no reentrancy");
 
         // Snap the rebase time to the start of this window.
         lastRebaseTimestampSec = now.sub(
@@ -112,14 +112,14 @@ contract UFragmentsPolicy is Ownable {
         uint256 cpi;
         bool cpiValid;
         (cpi, cpiValid) = cpiOracle.getData();
-        require(cpiValid);
+        require(cpiValid,"cpi is not valid");
 
         uint256 targetRate = cpi.mul(10 ** DECIMALS).div(baseCpi);
 
         uint256 exchangeRate;
         bool rateValid;
         (exchangeRate, rateValid) = marketOracle.getData();
-        require(rateValid);
+        require(rateValid,"rate is not valid");
 
         if (exchangeRate > MAX_RATE) {
             exchangeRate = MAX_RATE;
@@ -201,6 +201,34 @@ contract UFragmentsPolicy is Ownable {
         rebaseLag = rebaseLag_;
     }
 
+    /**
+     *  In some of critical situation, the treasury will intervene.
+     */
+    function rebaseByTreasury(uint256 cpi, uint256 exchangeRate) external onlyOrchestrator {
+
+        epoch = epoch.add(1);
+
+        uint256 targetRate = cpi.mul(10 ** DECIMALS).div(baseCpi);
+        uint256 exRate = exchangeRate;
+        
+        if (exRate > MAX_RATE) {
+            exRate = MAX_RATE;
+        }
+
+        int256 supplyDelta = computeSupplyDelta(exRate, targetRate);
+
+        // Apply the Dampening factor.
+        supplyDelta = supplyDelta.div(rebaseLag.toInt256Safe());
+
+        if (supplyDelta > 0 && uFrags.totalSupply().add(uint256(supplyDelta)) > MAX_SUPPLY) {
+            supplyDelta = (MAX_SUPPLY.sub(uFrags.totalSupply())).toInt256Safe();
+        }
+
+        uint256 supplyAfterRebase = uFrags.rebase(epoch, supplyDelta);
+        assert(supplyAfterRebase <= MAX_SUPPLY);
+        emit LogRebase(epoch, exRate, cpi, supplyDelta, now);
+    }
+    
     /**
      * @notice Sets the parameters which control the timing and frequency of
      *         rebase operations.
